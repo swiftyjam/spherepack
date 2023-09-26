@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Esferas con Three.js</title>
+    <style>
+        body {
+            margin: 0;
+        }
+        
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        let scene, camera, renderer;
+        const spheres = [];
+        const MAX_ATTEMPTS = 10;
+
+        // Variables para la rotación con el mouse
+        let isDragging = false;
+        let previousMousePosition = {
+            x: 0,
+            y: 0
+        };
+        let theta = 0; // Ángulo horizontal
+        let phi = Math.PI / 2; // Ángulo vertical
+        const radius = 200; // Distancia de la cámara al centro
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({
+                antialias: true
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Esfera grande en el centro
+            const geometry = new THREE.SphereGeometry(50, 32, 32);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,
+                wireframe: true
+            });
+            const centerSphere = new THREE.Mesh(geometry, material);
+            scene.add(centerSphere);
+
+            // Generar esferas pequeñas alrededor
+            for (let i = 0; i < 100; i++) {
+                const radius = Math.random() * 12 + 8;
+                const smallGeometry = new THREE.SphereGeometry(radius, 16, 16);
+                const smallMaterial = new THREE.MeshBasicMaterial({
+                    color: Math.random() * 0xffffff,
+                    wireframe: true
+                });
+                const smallSphere = new THREE.Mesh(smallGeometry, smallMaterial);
+
+                let attempts = 0;
+                do {
+                    attempts++;
+                    let phi = Math.random() * 2 * Math.PI;
+                    let theta = Math.random() * Math.PI;
+
+                    smallSphere.position.x = (55 + radius) * Math.sin(theta) * Math.cos(phi);
+                    smallSphere.position.y = (55 + radius) * Math.sin(theta) * Math.sin(phi);
+                    smallSphere.position.z = (55 + radius) * Math.cos(theta);
+                } while (isOverlap(smallSphere) && attempts < MAX_ATTEMPTS);
+
+                if (attempts < MAX_ATTEMPTS) {
+                    scene.add(smallSphere);
+                    spheres.push(smallSphere);
+                }
+            }
+
+            updateCameraPosition();
+
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('mousedown', onMouseDown, false);
+            document.addEventListener('mousemove', onMouseMove, false);
+            document.addEventListener('mouseup', onMouseUp, false);
+        }
+
+        function isOverlap(sphere) {
+            for (let i = 0; i < spheres.length; i++) {
+                const dist = sphere.position.distanceTo(spheres[i].position);
+                if (dist < (sphere.geometry.parameters.radius + spheres[i].geometry.parameters.radius)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseDown(e) {
+            isDragging = true;
+        }
+
+        function onMouseMove(e) {
+            if (isDragging) {
+                const deltaTheta = toRadians(e.offsetX - previousMousePosition.x) * 0.5;
+                const deltaPhi = toRadians(e.offsetY - previousMousePosition.y) * 0.5;
+
+                theta -= deltaTheta;
+                phi -= deltaPhi;
+
+                // Restricciones para phi (para evitar que la cámara gire completamente hacia arriba o hacia abajo)
+                phi = Math.max(0.01, Math.min(Math.PI - 0.01, phi));
+
+                updateCameraPosition();
+            }
+
+            previousMousePosition = {
+                x: e.offsetX,
+                y: e.offsetY
+            };
+        }
+
+        function onMouseUp(e) {
+            isDragging = false;
+        }
+
+        function updateCameraPosition() {
+            camera.position.x = radius * Math.sin(phi) * Math.sin(theta);
+            camera.position.y = radius * Math.cos(phi);
+            camera.position.z = radius * Math.sin(phi) * Math.cos(theta);
+            camera.lookAt(scene.position);
+        }
+
+        function toRadians(angle) {
+            return angle * (Math.PI / 180);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // Hacer que todas las esferas miren hacia la cámara
+            for (let sphere of spheres) {
+                sphere.lookAt(camera.position);
+            }
+            renderer.render(scene, camera);
+        }
+    </script>
+
+</body>
+
+</html>
