@@ -35,8 +35,12 @@
         let phi = Math.PI / 2; // Ángulo vertical
         const radius = 200; // Distancia de la cámara al centro
 
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
         init();
         animate();
+
 
         function init() {
             scene = new THREE.Scene();
@@ -89,6 +93,13 @@
             document.addEventListener('mousedown', onMouseDown, false);
             document.addEventListener('mousemove', onMouseMove, false);
             document.addEventListener('mouseup', onMouseUp, false);
+        }
+
+
+
+        function generateSpheresAround(centerSphere) {
+            // Aquí puedes usar un código similar al que ya tienes para generar esferas alrededor de la esfera grande,
+            // pero en lugar de usar el origen (0, 0, 0), usarás la posición de centerSphere.
         }
 
         function isOverlap(sphere) {
@@ -148,7 +159,6 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            // Hacer que todas las esferas miren hacia la cámara
             for (let sphere of spheres) {
                 sphere.lookAt(camera.position);
             }
