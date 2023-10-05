@@ -23,7 +23,7 @@
 
 
     <script>
-        let scene, camera, renderer, cube, sphere, light;
+        let scene, camera, renderer, cube, sphere, disc, light;
         let isDragging = false;
         let lastMouseX = null,
             lastMouseY = null;
@@ -48,17 +48,22 @@
             lastMouseY = e.clientY;
         });
 
+        let targetTheta = theta;
+        let targetPhi = phi;
+        const lerpFactor = 0.1; // Puedes ajustar esto para obtener una aceleración/desaceleración más rápida/lenta
+
         document.addEventListener('mousemove', function(e) {
             if (!isDragging) return;
 
             let deltaX = e.clientX - lastMouseX;
             let deltaY = e.clientY - lastMouseY;
 
-            theta -= deltaX * 0.01;
-            phi -= deltaY * 0.01;
+            targetTheta -= deltaX * 0.01;
+            targetPhi -= deltaY * 0.01;
 
-            // Clamp the vertical movement to prevent flipping
-            phi = Math.max(0.01, Math.min(Math.PI - 0.01, phi));
+            // Clamp the vertical movement to avoid reaching the zenith/nadir
+            const EPSILON = 0.1; // A small value to keep the camera from reaching exactly the top or bottom
+            targetPhi = Math.max(EPSILON, Math.min(Math.PI - EPSILON, targetPhi));
 
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
@@ -70,9 +75,32 @@
         init();
         animate();
 
+        function generateRadialGradientBackground(color1, color2, width, height) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width || 256; // Recomiendo usar una resolución más alta para el degradado radial
+            canvas.height = height || 256;
+
+            const ctx = canvas.getContext('2d');
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const gradientRadius = Math.sqrt(centerX * centerX + centerY * centerY);
+
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, gradientRadius);
+            gradient.addColorStop(0, color1);
+            gradient.addColorStop(1, color2);
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            return canvas;
+        }
+
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xeeefff); // Fondo lila pizarra
+            const gradientBackground = generateRadialGradientBackground('#eaefff', '#afcfcf'); // Cambia los colores a tu preferencia
+            const gradientTexture = new THREE.CanvasTexture(gradientBackground);
+            scene.background = gradientTexture; // Fondo lila pizarra
             const amlight = new THREE.AmbientLight(0xffaaff); // soft white light
             scene.add(amlight);
             camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -82,14 +110,17 @@
                 antialias: false
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
 
+
             // Cube rojo dentro de la esfera
-            const cubeGeometry = new THREE.SphereGeometry(25, 64, 64);
+            const cubeGeometry = new THREE.SphereGeometry(26, 64, 64);
             const cubeMaterial = new THREE.MeshPhysicalMaterial({
                 color: 0xffffff,
                 specularIntensity: 10,
                 emissive: 0xccccdd,
+                transparent: true
 
 
             });
@@ -112,8 +143,19 @@
             }
 
             cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-
             scene.add(cube);
+
+            const discgeometry = new THREE.CircleGeometry(26, 32);
+            const discmaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff
+            });
+            disc = new THREE.Mesh(discgeometry, discmaterial);
+            const innerTexture = new THREE.TextureLoader();
+            innerTexture.load('https://global-uploads.webflow.com/62f3882bdf914586601e212a/642c1fd62181e9b705d88b61_case_ekhi_02.jpg', (texture) => {
+                discmaterial.map = texture
+                discmaterial.needsUpdate = true
+            });
+            scene.add(disc);
 
             // Esfera con shader de frosted glass
             const sphereGeometry = new THREE.SphereGeometry(30, 64, 64);
@@ -121,39 +163,45 @@
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
             pmremGenerator.compileEquirectangularShader();
 
+
+            const physicalMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0xffeeef,
+                roughness: 1.6,
+                clearcoat: 0.8,
+                clearcoatRoughness: 8,
+                transmission: 1,
+                reflectivity: 8,
+                thickness: 16,
+                ior: 1.12,
+                iridescence: 4,
+                sheen: 1,
+                sheenRoughness: 8,
+                sheenColor: 0xeadaff,
+                envMapIntensity: 2,
+                bumpScale: 0.1,
+                specularIntensity: 2.0
+
+            });
             // Load environment map
-            const textureLoader = new THREE.TextureLoader();
-            textureLoader.load('https://t3.ftcdn.net/jpg/02/96/91/52/360_F_296915204_6WqeZVClsMSz3Puc6WzfmxCDazJquKyr.jpg', (texture) => {
+            const envMapTexture = new THREE.TextureLoader();
+            envMapTexture.load('https://t3.ftcdn.net/jpg/02/96/91/52/360_F_296915204_6WqeZVClsMSz3Puc6WzfmxCDazJquKyr.jpg', (texture) => {
                 const envMap = pmremGenerator.fromEquirectangular(texture).texture;
                 // scene.background = envMap;
                 physicalMaterial.envMap = envMap;
                 physicalMaterial.needsUpdate = true;
                 pmremGenerator.dispose();
             });
-            const physicalMaterial = new THREE.MeshPhysicalMaterial({
-                color: 0xffeeff,
-                metalness: 0.1,
-                roughness: 0.4,
-                clearcoat: 1,
-                clearcoatRoughness: 1,
-                transmission: 1,
-                reflectivity: 1,
-                transparent: true,
-                opacity: 1.,
-                thickness: 8.,
-                ior: 1.2,
-                iridiscense: 10.5,
-                sheen: 2,
-                sheenRoughness: 1.5,
-                sheencColor: 0xffffff,
-                envMap: textureLoader,
-                envMapIntensity: 2,
-                specularIntensity: .0
-
+            //https://www.goodtextures.com/cache/bd229a95/av9ba39985c4b3b8b4d99.png
+            //https://img.cgaxis.com/2021/08/dirty_glass_43_92_opacity.jpg
+            //https://st.depositphotos.com/8451324/53474/i/450/depositphotos_534741292-stock-photo-gray-background-stains-wall.jpg
+            //https://previews.123rf.com/images/gonin/gonin1806/gonin180600082/103602805-seamless-tileable-texture-of-fingerprints-can-be-used-to-3d-render-as-roughness-or-bump-map-for.jpg
+            const frostMapTexture = new THREE.TextureLoader();
+            frostMapTexture.load('https://img.cgaxis.com/2021/08/dirty_glass_43_92_opacity.jpg', (texture) => {
+                physicalMaterial.roughnessMap = texture;
+                physicalMaterial.specularIntensityMap = texture;
+                physicalMaterial.bumpMap = texture;
+                physicalMaterial.needsUpdate = true;
             });
-
-
-
             physicalMaterial.onBeforeCompile = function(shader) {
                 const customTransformCode = `
                     float time = 5.0;
@@ -187,15 +235,15 @@
                     float fresnelBias = 1.;
 
                     // Controla cómo se "extiende" el efecto Fresnel
-                    float fresnelExponent = 2.0;
+                    float fresnelExponent = 1.5;
 
                     // Escala el efecto Fresnel
-                    float fresnelScale = 2.0;
+                    float fresnelScale = 1.3;
 
                     float fresnelEffect = fresnelScale * pow(clamp(fresnelBias - dot(normalize(vNormal), viewDirection), 0.0, 1.0), fresnelExponent);
 
                     // Ajusta los valores RGB para obtener diferentes tintes de color
-                    vec3 fresnelColorTint = vec3(0.25, 0.25, 0.25);
+                    vec3 fresnelColorTint = vec3(0.2, 0.2, 0.2);
 
                     // Define el color central o base
                     vec3 centerColor = vec3(.7, .8, 0.9); // Blanco como ejemplo
@@ -204,7 +252,7 @@
                     vec3 finalColor = centerColor + fresnelColorTint * fresnelEffect;
 
                     // Controla qué tan fuerte es la mezcla
-                    float mixingRatio = 0.6;
+                    float mixingRatio = 0.8;
 
                     gl_FragColor.rgb = mix(gl_FragColor.rgb, finalColor, mixingRatio);
                     #include <dithering_fragment>
@@ -213,18 +261,53 @@
             };
 
             sphere = new THREE.Mesh(sphereGeometry, physicalMaterial);
-
-            sphere = new THREE.Mesh(sphereGeometry, physicalMaterial);
+            sphere.receiveShadow = true;
+            sphere.castShadow = true;
             scene.add(sphere);
 
-            // Luz direccional
-            light = new THREE.DirectionalLight(0xffffff, 0.5);
-            light.castShadow = false;
-            light.position.set(2, 2, 2);
-            scene.add(light);
-            light2 = new THREE.DirectionalLight(0xffccff, 0.);
-            light2.position.set(-9, 10, 2);
-            scene.add(light2);
+            // Configuración común de la cámara de sombras
+            const commonShadowCamera = {
+                left: -100,
+                right: 100,
+                top: 100,
+                bottom: -100,
+                near: 1,
+                far: 200,
+                mapSize: new THREE.Vector2(1024, 1024)
+            };
+
+            // Configuración de luces
+            let lightConfigs = [{
+                color: 0xaafaff,
+                intensity: 8,
+                position: new THREE.Vector3(100, 100, 100),
+            }, {
+                color: 0xfeffef,
+                intensity: 8,
+                position: new THREE.Vector3(-100, -100, 100),
+            }, {
+                color: 0xeeaaaa,
+                intensity: 8,
+                position: new THREE.Vector3(100, 100, -100),
+            }];
+
+            // Crear luces basadas en la configuración
+            for (let config of lightConfigs) {
+                let light = new THREE.DirectionalLight(config.color, config.intensity);
+                light.position.copy(config.position);
+                light.castShadow = true;
+
+                // Aplicar configuración común de la cámara de sombras
+                light.shadow.camera.left = commonShadowCamera.left;
+                light.shadow.camera.right = commonShadowCamera.right;
+                light.shadow.camera.top = commonShadowCamera.top;
+                light.shadow.camera.bottom = commonShadowCamera.bottom;
+                light.shadow.camera.near = commonShadowCamera.near;
+                light.shadow.camera.far = commonShadowCamera.far;
+                light.shadow.mapSize.copy(commonShadowCamera.mapSize);
+
+                scene.add(light);
+            }
 
 
             camera.position.z = 100;
@@ -245,7 +328,6 @@
                 });
                 const smallSphere = new THREE.Mesh(smallGeometry, physicalMaterial);
                 const SmallCubeGeometry = new THREE.IcosahedronGeometry(radius * 0.5, 0);
-
                 smallcube = new THREE.Mesh(SmallCubeGeometry, smallMaterial);
                 let attempts = 0;
                 do {
@@ -259,15 +341,16 @@
                 } while (isOverlap(smallSphere) && attempts < MAX_ATTEMPTS);
 
                 if (attempts < MAX_ATTEMPTS) {
+                    smallSphere.castShadow = true;
+                    smallSphere.receiveShadow = true;
                     scene.add(smallSphere);
                     scene.add(smallcube);
+
                     spheres.push(smallSphere);
                 }
             }
 
-            light2 = new THREE.DirectionalLight(0xaaeeff, 0.);
-            light2.position.set(-100, -100, -100);
-            scene.add(light2);
+
         }
 
         function isOverlap(sphere) {
@@ -281,7 +364,11 @@
         }
 
         function animate() {
-            if (isDragging) {
+            // Interpolación para suavidad
+            theta = THREE.MathUtils.lerp(theta, targetTheta, lerpFactor);
+            phi = THREE.MathUtils.lerp(phi, targetPhi, lerpFactor);
+
+            if (isDragging || Math.abs(targetTheta - theta) > 0.001 || Math.abs(targetPhi - phi) > 0.001) {
                 let radius = 100;
 
                 camera.position.x = radius * Math.sin(phi) * Math.sin(theta);
@@ -290,9 +377,8 @@
                 camera.lookAt(scene.position);
             }
 
-            // cube.rotation.x += 0.01;
-            // cube.rotation.y += 0.01;
-            // cube.position.x += Math.cos(cube.rotation.x) / 4;
+            disc.lookAt(camera.position);
+
             renderer.render(scene, camera);
             requestAnimationFrame(animate);
         }
